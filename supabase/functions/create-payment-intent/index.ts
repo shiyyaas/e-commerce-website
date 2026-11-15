@@ -51,17 +51,24 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     )
 
+    const productIds = items.map((i: any) => i.product_id)
+    const { data: products, error: prodError } = await supabaseAdmin
+      .from("products")
+      .select("id, title, price, stock")
+      .in("id", productIds)
+
+    if (prodError || !products) {
+      throw new Error("Failed to fetch products for validation")
+    }
+
+    const productMap = new Map(products.map((p: any) => [p.id, p]))
     let totalCents = 0
     const validatedItems = []
 
     for (const item of items) {
-      const { data: product, error: prodError } = await supabaseAdmin
-        .from("products")
-        .select("id, title, price, stock")
-        .eq("id", item.product_id)
-        .single()
+      const product = productMap.get(item.product_id)
 
-      if (prodError || !product) {
+      if (!product) {
         throw new Error(`Product not found: ${item.product_id}`)
       }
 
@@ -91,7 +98,7 @@ serve(async (req) => {
         user_id: user.id,
         shipping_city: shipping_address?.city || "",
         shipping_postal_code: shipping_address?.postalCode || "",
-        items_count: items.reduce((acc, i) => acc + i.quantity, 0),
+        items_count: items.reduce((acc: number, i: any) => acc + Number(i.quantity || 0), 0),
       },
     })
 

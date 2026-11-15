@@ -4,11 +4,9 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { createOrder, createPaymentIntent } from '../../lib/dataService';
 import { ShippingAddress, Order } from '../../types/database';
-import { loadStripe } from '@stripe/stripe-js';
+import { stripePromise } from '../../lib/stripe';
+import { isLiveSupabaseConfigured } from '../../lib/supabase';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-
-const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_mock_publishable_key';
-const stripePromise = loadStripe(publishableKey);
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -83,9 +81,15 @@ function StripePaymentForm({
           throw new Error(error.message || 'Payment authentication failed.');
         }
 
-        if (paymentIntent && paymentIntent.status === 'succeeded') {
+        if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing')) {
+          const targetUserId = user
+            ? user.id
+            : isLiveSupabaseConfigured
+            ? (() => { throw new Error('Please sign in or create an account to complete your order.'); })()
+            : 'guest-order-user';
+
           const createdOrder = await createOrder({
-            userId: user ? user.id : 'guest-order-user',
+            userId: targetUserId,
             items: itemsPayload,
             shippingAddress: shipping,
             paymentIntentId: paymentIntent.id,
@@ -106,8 +110,14 @@ function StripePaymentForm({
           await new Promise((res) => setTimeout(res, 1200));
         }
 
+        const targetUserId = user
+          ? user.id
+          : isLiveSupabaseConfigured
+          ? (() => { throw new Error('Please sign in or create an account to complete your order.'); })()
+          : 'guest-order-user';
+
         const createdOrder = await createOrder({
-          userId: user ? user.id : 'guest-order-user',
+          userId: targetUserId,
           items: itemsPayload,
           shippingAddress: shipping,
           paymentIntentId,

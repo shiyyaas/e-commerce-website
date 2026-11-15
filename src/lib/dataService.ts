@@ -210,11 +210,15 @@ export async function createOrder(params: {
         throw new Error(error.message);
       }
 
+      if (!data || !data.order_id) {
+        throw new Error('Order creation transaction returned no data or order ID.');
+      }
+
       // Fetch newly created order
       const { data: orderData } = await (supabase as any)
         .from('orders')
         .select('*, items:order_items(*, product:products(*))')
-        .eq('id', (data as any).order_id)
+        .eq('id', data.order_id)
         .single();
 
       if (orderData) {
