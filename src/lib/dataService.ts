@@ -323,3 +323,48 @@ export async function saveProfile(profile: Profile): Promise<void> {
   }
   localStorage.setItem(LOCAL_PROFILE_KEY + '_' + profile.id, JSON.stringify(profile));
 }
+
+// -------------------------------------------------------------
+// Payment Intent Service
+// -------------------------------------------------------------
+export async function createPaymentIntent(params: {
+  items: { product: Product; quantity: number }[];
+  shippingAddress: ShippingAddress;
+}): Promise<{ clientSecret: string; paymentIntentId: string; isMock?: boolean }> {
+  const { items, shippingAddress } = params;
+
+  if (isLiveSupabaseConfigured && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
+    try {
+      const payloadItems = items.map(i => ({
+        product_id: i.product.id,
+        quantity: i.quantity,
+      }));
+
+      const { data, error } = await (supabase as any).functions.invoke('create-payment-intent', {
+        body: { items: payloadItems, shipping_address: shippingAddress },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to create payment intent');
+      }
+
+      if (data && data.clientSecret && data.paymentIntentId) {
+        return {
+          clientSecret: data.clientSecret,
+          paymentIntentId: data.paymentIntentId,
+          isMock: false,
+        };
+      }
+    } catch (e) {
+      console.warn('Supabase functions invoke create-payment-intent failed, falling back to mock payment:', e);
+    }
+  }
+
+  // Fallback mock payment intent for offline / local test mode
+  const mockId = 'pi_mock_' + Math.random().toString(36).substring(2, 10);
+  return {
+    clientSecret: mockId + '_secret_' + Math.random().toString(36).substring(2, 8),
+    paymentIntentId: mockId,
+    isMock: true,
+  };
+}
